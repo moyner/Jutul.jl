@@ -98,19 +98,23 @@ function multicolor_ilu_pattern(rowptr::Vector{Ti}, colval, permutation) where {
     return permuted_rowptr, permuted_colval, value_positions
 end
 
-@kernel function ilu_gather_kernel!(destination, @Const(source), @Const(positions), n)
-    i = @index(Global)
+@inline function ilu_gather_kernel_at_index!(kernel_index, destination, source, positions, n)
+    i = kernel_index
     if i <= n
         @inbounds destination[i] = source[positions[i]]
     end
 end
 
-@kernel function ilu_scatter_kernel!(destination, @Const(source), @Const(positions), n)
-    i = @index(Global)
+ilu_gather_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(ilu_gather_kernel_at_index!, workgroupsize)
+
+@inline function ilu_scatter_kernel_at_index!(kernel_index, destination, source, positions, n)
+    i = kernel_index
     if i <= n
         @inbounds destination[positions[i]] = source[i]
     end
 end
+
+ilu_scatter_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(ilu_scatter_kernel_at_index!, workgroupsize)
 
 function ilu_gather!(destination, source, positions, backend, block_size)
     ilu_gather_kernel!(backend, block_size)(
@@ -130,7 +134,7 @@ end
 
 function ilu_gather!(
         destination::Vector, source::AbstractVector, positions::Vector,
-        ::KernelAbstractions.CPU, block_size
+        ::CPUBackend, block_size
     )
     @batch for i in eachindex(destination)
         @inbounds destination[i] = source[positions[i]]
@@ -140,7 +144,7 @@ end
 
 function ilu_scatter!(
         destination::AbstractVector, source::Vector, positions::Vector,
-        ::KernelAbstractions.CPU, block_size
+        ::CPUBackend, block_size
     )
     @batch for i in eachindex(source)
         @inbounds destination[positions[i]] = source[i]
@@ -218,7 +222,7 @@ end
 
 function apply!(x::AbstractVector, state::MulticolorILUState, b::AbstractVector)
     require_apply_dimensions(x, state, b)
-    same_backend(KernelAbstractions.get_backend(x), state.backend) ||
+    same_backend(array_backend(x), state.backend) ||
         throw(ArgumentError("output and smoother must use the same backend"))
     ilu_gather!(state.permuted_rhs, b, state.permutation, state.backend, state.block_size)
     apply_permuted_ilu!(state, state.backend)

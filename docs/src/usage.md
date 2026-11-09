@@ -3,6 +3,19 @@
 
 This section lists the main interfaces for interacting with codes that use Jutul as their foundation.
 
+KernelAbstractions is optional. CPU simulation, AMG, and smoothers work with
+`using Jutul` alone. Load `KernelAbstractions` before constructing a
+`KernelAbstractionsContext` or transferring a simulator to a KA backend:
+
+```julia
+using Jutul, KernelAbstractions
+context = KernelAbstractionsContext(CPU())
+```
+
+Accelerator backends additionally require their backend package, such as CUDA,
+AMDGPU, or Metal. Downstream packages that define KA kernels should depend on
+and import KernelAbstractions directly.
+
 ## Setting up models
 
 ```@docs

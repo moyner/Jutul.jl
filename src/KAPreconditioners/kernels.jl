@@ -1,15 +1,19 @@
-@kernel function copy_kernel!(dst, @Const(src), n)
-    i = @index(Global)
+@inline function copy_kernel_at_index!(kernel_index, dst, src, n)
+    i = kernel_index
     i <= n && (@inbounds dst[i] = src[i])
 end
 
-@kernel function fill_kernel!(dst, value, n)
-    i = @index(Global)
+copy_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(copy_kernel_at_index!, workgroupsize)
+
+@inline function fill_kernel_at_index!(kernel_index, dst, value, n)
+    i = kernel_index
     i <= n && (@inbounds dst[i] = value)
 end
 
-@kernel function spmv_kernel!(y, @Const(rp), @Const(cv), @Const(av), @Const(x), n)
-    i = @index(Global)
+fill_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(fill_kernel_at_index!, workgroupsize)
+
+@inline function spmv_kernel_at_index!(kernel_index, y, rp, cv, av, x, n)
+    i = kernel_index
     if i <= n
         s = zero(eltype(y))
         @inbounds for k in rp[i]:(rp[i + 1] - 1)
@@ -19,8 +23,10 @@ end
     end
 end
 
-@kernel function residual_kernel!(r, @Const(b), @Const(x), @Const(rp), @Const(cv), @Const(av), n)
-    i = @index(Global)
+spmv_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(spmv_kernel_at_index!, workgroupsize)
+
+@inline function residual_kernel_at_index!(kernel_index, r, b, x, rp, cv, av, n)
+    i = kernel_index
     if i <= n
         s = zero(eltype(r))
         @inbounds for k in rp[i]:(rp[i + 1] - 1)
@@ -30,11 +36,13 @@ end
     end
 end
 
-@kernel function strength_kernel!(
-        strong, @Const(rp), @Const(cv), @Const(av),
+residual_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(residual_kernel_at_index!, workgroupsize)
+
+@inline function strength_kernel_at_index!(kernel_index,
+        strong, rp, cv, av,
         theta, max_row_sum, strength_mode, n
     )
-    i = @index(Global)
+    i = kernel_index
     if i <= n
         diag = zero(eltype(av))
         row_sum = zero(eltype(av))
@@ -81,8 +89,10 @@ end
     end
 end
 
-@kernel function csr_to_dense_kernel!(dense, @Const(rp), @Const(cv), @Const(av), n)
-    i = @index(Global)
+strength_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(strength_kernel_at_index!, workgroupsize)
+
+@inline function csr_to_dense_kernel_at_index!(kernel_index, dense, rp, cv, av, n)
+    i = kernel_index
     if i <= n
         @inbounds for k in rp[i]:(rp[i + 1] - 1)
             dense[i, cv[k]] = av[k]
@@ -90,11 +100,13 @@ end
     end
 end
 
-@kernel function restrict_kernel!(
-        bc, @Const(offsets), @Const(rows), @Const(pidx),
-        @Const(pval), @Const(r), n
+csr_to_dense_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(csr_to_dense_kernel_at_index!, workgroupsize)
+
+@inline function restrict_kernel_at_index!(kernel_index,
+        bc, offsets, rows, pidx,
+        pval, r, n
     )
-    I = @index(Global)
+    I = kernel_index
     if I <= n
         s = zero(eltype(bc))
         @inbounds for k in offsets[I]:(offsets[I + 1] - 1)
@@ -104,8 +116,10 @@ end
     end
 end
 
-@kernel function prolong_kernel!(x, @Const(rp), @Const(cv), @Const(pv), @Const(xc), n)
-    i = @index(Global)
+restrict_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(restrict_kernel_at_index!, workgroupsize)
+
+@inline function prolong_kernel_at_index!(kernel_index, x, rp, cv, pv, xc, n)
+    i = kernel_index
     if i <= n
         s = zero(eltype(x))
         @inbounds for k in rp[i]:(rp[i + 1] - 1)
@@ -115,11 +129,13 @@ end
     end
 end
 
-@kernel function prolong_to_kernel!(
-        dst, @Const(src), @Const(rp), @Const(cv),
-        @Const(pv), @Const(xc), n
+prolong_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(prolong_kernel_at_index!, workgroupsize)
+
+@inline function prolong_to_kernel_at_index!(kernel_index,
+        dst, src, rp, cv,
+        pv, xc, n
     )
-    i = @index(Global)
+    i = kernel_index
     if i <= n
         s = zero(eltype(dst))
         @inbounds for k in rp[i]:(rp[i + 1] - 1)
@@ -129,11 +145,13 @@ end
     end
 end
 
-@kernel function galerkin_kernel!(
-        ac, @Const(a), @Const(p), @Const(offsets),
-        @Const(pl), @Const(ai), @Const(pr), n
+prolong_to_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(prolong_to_kernel_at_index!, workgroupsize)
+
+@inline function galerkin_kernel_at_index!(kernel_index,
+        ac, a, p, offsets,
+        pl, ai, pr, n
     )
-    k = @index(Global)
+    k = kernel_index
     if k <= n
         s = zero(eltype(ac))
         @inbounds for t in offsets[k]:(offsets[k + 1] - 1)
@@ -142,6 +160,8 @@ end
         @inbounds ac[k] = s
     end
 end
+
+galerkin_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(galerkin_kernel_at_index!, workgroupsize)
 
 # Membership in the complete, untruncated coarse stencil. Numeric updates
 # retain P's sparsity but must use the original stencil to compute weights.
@@ -253,17 +273,19 @@ end
     return nothing
 end
 
-@kernel function update_interpolation_p_kernel!(
-        pv, @Const(prp), @Const(pcv),
-        @Const(arp), @Const(acv), @Const(av),
-        @Const(cf), @Const(cmap), @Const(strong),
+@inline function update_interpolation_p_kernel_at_index!(kernel_index,
+        pv, prp, pcv,
+        arp, acv, av,
+        cf, cmap, strong,
         extended, rescale, n
     )
-    i = @index(Global)
+    i = kernel_index
     if i <= n
         update_interpolation_row!(pv, prp, pcv, arp, acv, av, cf, cmap, strong, extended, rescale, i)
     end
 end
+
+update_interpolation_p_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(update_interpolation_p_kernel_at_index!, workgroupsize)
 
 # GPU extensions return true when a cached vendor product was performed.
 vendor_spmv!(y, A, x, alpha, beta) = false
@@ -349,7 +371,7 @@ function fill_backend!(x, value, backend, block_size)
     return x
 end
 
-fill_backend!(x::Array, value, ::KernelAbstractions.CPU, block_size) = fill!(x, value)
+fill_backend!(x::Array, value, ::CPUBackend, block_size) = fill!(x, value)
 
 function update_coarse_solver!(S::CoarseLUState, A::StaticSparsityMatrixCSR)
     @inbounds for k in 1:matrix_nonzeros(A)
@@ -370,6 +392,17 @@ function copy_csr_to_dense!(dense, A::StaticSparsityMatrixCSR)
     # accelerator implementations enqueue work on their own library stream.
     # Make the KernelAbstractions writes visible before either kind is called.
     synchronize_backend(backend)
+    return dense
+end
+
+function copy_csr_to_dense!(
+        dense::Matrix,
+        A::StaticSparsityMatrixCSR{Tv, Ti, <:Vector, <:Vector, <:Vector}
+    ) where {Tv, Ti}
+    fill!(dense, zero(eltype(dense)))
+    @inbounds for row in 1:matrix_nrows(A), pos in A.rowptr[row]:(A.rowptr[row + 1] - 1)
+        dense[row, A.colval[pos]] = A.nzval[pos]
+    end
     return dense
 end
 

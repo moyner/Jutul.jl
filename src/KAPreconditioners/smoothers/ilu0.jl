@@ -102,13 +102,13 @@ function ilu_symbolic(A::StaticSparsityMatrixCSR{Tv, Ti}) where {Tv, Ti}
     )
 end
 
-@kernel function ilu0_factor_level_kernel!(
+@inline function ilu0_factor_level_kernel_at_index!(kernel_index,
         factors, inverse_diagonal,
-        @Const(rowptr), @Const(colval),
-        @Const(diagonal_positions),
-        @Const(rows), first, count
+        rowptr, colval,
+        diagonal_positions,
+        rows, first, count
     )
-    q = @index(Global)
+    q = kernel_index
     if q <= count
         i = rows[first + q - 1]
         @inbounds for k in rowptr[i]:(diagonal_positions[i] - one(eltype(rowptr)))
@@ -127,14 +127,16 @@ end
     end
 end
 
-@kernel function dilu_factor_level_kernel!(
-        inverse_diagonal, @Const(values),
-        @Const(rowptr), @Const(colval),
-        @Const(diagonal_positions),
-        @Const(transpose_positions),
-        @Const(rows), first, count
+ilu0_factor_level_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(ilu0_factor_level_kernel_at_index!, workgroupsize)
+
+@inline function dilu_factor_level_kernel_at_index!(kernel_index,
+        inverse_diagonal, values,
+        rowptr, colval,
+        diagonal_positions,
+        transpose_positions,
+        rows, first, count
     )
-    q = @index(Global)
+    q = kernel_index
     if q <= count
         i = rows[first + q - 1]
         diagonal = values[diagonal_positions[i]]
@@ -152,12 +154,14 @@ end
     end
 end
 
-@kernel function ilu0_lower_level_kernel!(
-        work, @Const(rhs), @Const(factors),
-        @Const(rowptr), @Const(colval), @Const(diagonal_positions),
-        @Const(rows), first, count
+dilu_factor_level_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(dilu_factor_level_kernel_at_index!, workgroupsize)
+
+@inline function ilu0_lower_level_kernel_at_index!(kernel_index,
+        work, rhs, factors,
+        rowptr, colval, diagonal_positions,
+        rows, first, count
     )
-    q = @index(Global)
+    q = kernel_index
     if q <= count
         i = rows[first + q - 1]
         value = rhs[i]
@@ -169,13 +173,15 @@ end
     end
 end
 
-@kernel function ilu0_upper_level_kernel!(
-        x, @Const(work), @Const(factors),
-        @Const(inverse_diagonal),
-        @Const(rowptr), @Const(colval), @Const(diagonal_positions),
-        damping, @Const(rows), first, count
+ilu0_lower_level_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(ilu0_lower_level_kernel_at_index!, workgroupsize)
+
+@inline function ilu0_upper_level_kernel_at_index!(kernel_index,
+        x, work, factors,
+        inverse_diagonal,
+        rowptr, colval, diagonal_positions,
+        damping, rows, first, count
     )
-    q = @index(Global)
+    q = kernel_index
     if q <= count
         i = rows[first + q - 1]
         value = work[i]
@@ -187,13 +193,15 @@ end
     end
 end
 
-@kernel function dilu_lower_level_kernel!(
-        work, @Const(rhs), @Const(values),
-        @Const(inverse_diagonal),
-        @Const(rowptr), @Const(colval), @Const(diagonal_positions),
-        @Const(rows), first, count
+ilu0_upper_level_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(ilu0_upper_level_kernel_at_index!, workgroupsize)
+
+@inline function dilu_lower_level_kernel_at_index!(kernel_index,
+        work, rhs, values,
+        inverse_diagonal,
+        rowptr, colval, diagonal_positions,
+        rows, first, count
     )
-    q = @index(Global)
+    q = kernel_index
     if q <= count
         i = rows[first + q - 1]
         value = rhs[i]
@@ -205,14 +213,16 @@ end
     end
 end
 
-@kernel function dilu_upper_level_kernel!(
-        x, @Const(work), @Const(values),
-        @Const(inverse_diagonal),
-        @Const(rowptr), @Const(colval), @Const(diagonal_positions),
+dilu_lower_level_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(dilu_lower_level_kernel_at_index!, workgroupsize)
+
+@inline function dilu_upper_level_kernel_at_index!(kernel_index,
+        x, work, values,
+        inverse_diagonal,
+        rowptr, colval, diagonal_positions,
         damping,
-        @Const(rows), first, count
+        rows, first, count
     )
-    q = @index(Global)
+    q = kernel_index
     if q <= count
         i = rows[first + q - 1]
         correction = zero(eltype(x))
@@ -225,12 +235,14 @@ end
     end
 end
 
-@kernel function ilu0_smooth_lower_level_kernel!(
-        work, @Const(rhs),
-        @Const(x), @Const(matrix_values), @Const(factors),
-        @Const(rowptr), @Const(colval), @Const(rows), first, count
+dilu_upper_level_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(dilu_upper_level_kernel_at_index!, workgroupsize)
+
+@inline function ilu0_smooth_lower_level_kernel_at_index!(kernel_index,
+        work, rhs,
+        x, matrix_values, factors,
+        rowptr, colval, rows, first, count
     )
-    q = @index(Global)
+    q = kernel_index
     if q <= count
         i = rows[first + q - 1]
         value = rhs[i]
@@ -243,12 +255,14 @@ end
     end
 end
 
-@kernel function ilu0_smooth_upper_level_kernel!(
-        x, correction, @Const(work),
-        @Const(factors), @Const(inverse_diagonal), @Const(rowptr),
-        @Const(colval), @Const(diagonal_positions), damping, @Const(rows), first, count
+ilu0_smooth_lower_level_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(ilu0_smooth_lower_level_kernel_at_index!, workgroupsize)
+
+@inline function ilu0_smooth_upper_level_kernel_at_index!(kernel_index,
+        x, correction, work,
+        factors, inverse_diagonal, rowptr,
+        colval, diagonal_positions, damping, rows, first, count
     )
-    q = @index(Global)
+    q = kernel_index
     if q <= count
         i = rows[first + q - 1]
         value = work[i]
@@ -264,13 +278,15 @@ end
     end
 end
 
-@kernel function dilu_smooth_lower_level_kernel!(
-        work, @Const(rhs),
-        @Const(x), @Const(values), @Const(inverse_diagonal),
-        @Const(rowptr), @Const(colval),
-        @Const(rows), first, count
+ilu0_smooth_upper_level_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(ilu0_smooth_upper_level_kernel_at_index!, workgroupsize)
+
+@inline function dilu_smooth_lower_level_kernel_at_index!(kernel_index,
+        work, rhs,
+        x, values, inverse_diagonal,
+        rowptr, colval,
+        rows, first, count
     )
-    q = @index(Global)
+    q = kernel_index
     if q <= count
         i = rows[first + q - 1]
         value = rhs[i]
@@ -284,13 +300,15 @@ end
     end
 end
 
-@kernel function dilu_smooth_upper_level_kernel!(
-        x, correction, @Const(work),
-        @Const(values), @Const(inverse_diagonal), @Const(rowptr),
-        @Const(colval), @Const(diagonal_positions), damping,
-        @Const(rows), first, count
+dilu_smooth_lower_level_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(dilu_smooth_lower_level_kernel_at_index!, workgroupsize)
+
+@inline function dilu_smooth_upper_level_kernel_at_index!(kernel_index,
+        x, correction, work,
+        values, inverse_diagonal, rowptr,
+        colval, diagonal_positions, damping,
+        rows, first, count
     )
-    q = @index(Global)
+    q = kernel_index
     if q <= count
         i = rows[first + q - 1]
         value = work[i]
@@ -307,13 +325,15 @@ end
     end
 end
 
+dilu_smooth_upper_level_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(dilu_smooth_upper_level_kernel_at_index!, workgroupsize)
+
 function allocate_factor_storage(A::StaticSparsityMatrixCSR{Tv}; in_place::Bool = false) where {Tv}
     factors = if in_place
         A.nzval
     else
-        KernelAbstractions.allocate(matrix_backend(A), Tv, matrix_nonzeros(A))
+        backend_allocate(matrix_backend(A), Tv, matrix_nonzeros(A))
     end
-    inverse_diagonal = KernelAbstractions.allocate(matrix_backend(A), Tv, matrix_nrows(A))
+    inverse_diagonal = backend_allocate(matrix_backend(A), Tv, matrix_nrows(A))
     return factors, inverse_diagonal
 end
 
@@ -324,7 +344,7 @@ smoother_vector_eltype(::Type{<:StaticMatrix{N, N, T}}) where {N, T} =
 function allocate_ilu_work(A::StaticSparsityMatrixCSR{Tv}) where {Tv}
     backend = matrix_backend(A)
     vector_eltype = smoother_vector_eltype(Tv)
-    work = KernelAbstractions.allocate(
+    work = backend_allocate(
         backend, vector_eltype, matrix_nrows(A)
     )
     residual = similar(work)
@@ -340,6 +360,7 @@ function setup_ilu0_kernels(
         nothing, (nothing, nothing), (nothing, nothing),
     )
     backend = matrix_backend(A)
+    is_cpu_backend(backend) && return (nothing, (nothing, nothing), (nothing, nothing))
     block_size = matrix_batch_size(A)
     lower_first = factor_offsets[1]
     lower_count = factor_offsets[2] - lower_first
@@ -394,6 +415,7 @@ function setup_dilu_kernels(
         nothing, (nothing, nothing), (nothing, nothing),
     )
     backend = matrix_backend(A)
+    is_cpu_backend(backend) && return (nothing, (nothing, nothing), (nothing, nothing))
     block_size = matrix_batch_size(A)
     lower_first = factor_offsets[1]
     lower_count = factor_offsets[2] - lower_first
@@ -1069,7 +1091,7 @@ function apply!(
         b::AbstractVector
     )
     require_apply_dimensions(x, state, b)
-    same_backend(KernelAbstractions.get_backend(x), state.backend) ||
+    same_backend(array_backend(x), state.backend) ||
         throw(ArgumentError("output and smoother must use the same backend"))
     return ilu_solve!(x, state, b)
 end

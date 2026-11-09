@@ -106,12 +106,12 @@ function aggressive_on_backend(plan, backend, old = nothing; reallocation_tracke
     )
 end
 
-@kernel function update_partial_extended_p_kernel!(
-        pv, @Const(prp), @Const(pcv), @Const(rows),
-        @Const(arp), @Const(acv), @Const(av),
-        @Const(cf), @Const(cmap), @Const(strong), rescale, n
+@inline function update_partial_extended_p_kernel_at_index!(kernel_index,
+        pv, prp, pcv, rows,
+        arp, acv, av,
+        cf, cmap, strong, rescale, n
     )
-    row = @index(Global)
+    row = kernel_index
     if row <= n
         i = rows[row]
         firstp, lastp = prp[row], prp[row + 1] - 1
@@ -141,11 +141,13 @@ end
     end
 end
 
-@kernel function interpolation_product_kernel!(
-        values, @Const(p1), @Const(p2),
-        @Const(offsets), @Const(left), @Const(right), n
+update_partial_extended_p_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(update_partial_extended_p_kernel_at_index!, workgroupsize)
+
+@inline function interpolation_product_kernel_at_index!(kernel_index,
+        values, p1, p2,
+        offsets, left, right, n
     )
-    k = @index(Global)
+    k = kernel_index
     if k <= n
         value = zero(eltype(values))
         @inbounds for t in offsets[k]:(offsets[k + 1] - 1)
@@ -155,11 +157,13 @@ end
     end
 end
 
-@kernel function truncate_product_kernel!(
-        values, @Const(rp), @Const(full_values),
-        @Const(full_rp), @Const(retained), rescale, n
+interpolation_product_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(interpolation_product_kernel_at_index!, workgroupsize)
+
+@inline function truncate_product_kernel_at_index!(kernel_index,
+        values, rp, full_values,
+        full_rp, retained, rescale, n
     )
-    i = @index(Global)
+    i = kernel_index
     if i <= n
         original_sum = zero(eltype(values))
         kept_sum = zero(eltype(values))
@@ -178,6 +182,8 @@ end
         end
     end
 end
+
+truncate_product_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(truncate_product_kernel_at_index!, workgroupsize)
 
 function update_aggressive_prolongation!(level, interpolation::TwoStageExtendedIInterpolation)
     A, P, plan = level.A, level.P, level.aggressive

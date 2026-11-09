@@ -1403,7 +1403,7 @@ end
 
 @inline function buffer_backend_matches(buffer, backend)
     return try
-        same_backend(KernelAbstractions.get_backend(buffer), backend)
+        same_backend(array_backend(buffer), backend)
     catch
         false
     end
@@ -1491,8 +1491,8 @@ function Base.copyto!(
     )
     return destination
 end
-KernelAbstractions.get_backend(buffer::BackendBufferPrefix) =
-    KernelAbstractions.get_backend(backend_view(buffer))
+array_backend(buffer::BackendBufferPrefix) =
+    array_backend(backend_view(buffer))
 logical_backend_buffer(buffer::BackendBufferPrefix) =
     backend_view(buffer)
 function Adapt.adapt_structure(to, buffer::BackendBufferPrefix)
@@ -1749,7 +1749,7 @@ function build_host_coarse_solver(A::StaticSparsityMatrixCSR{Tv, Ti}) where {Tv,
 end
 
 function build_coarse_solver(A::StaticSparsityMatrixCSR{Tv, Ti}, backend, reuse = nothing) where {Tv, Ti}
-    if backend isa KernelAbstractions.CPU && Tv <: Union{Float64, ComplexF64}
+    if is_cpu_backend(backend) && Tv <: Union{Float64, ComplexF64}
         matrix = sparse_matrix(A)
         csr_to_csc = Vector{Ti}(undef, matrix_nonzeros(A))
         @inbounds for j in 1:matrix_ncols(A)
@@ -1761,17 +1761,17 @@ function build_coarse_solver(A::StaticSparsityMatrixCSR{Tv, Ti}, backend, reuse 
         end
         return CoarseLUState(matrix, lu(matrix), csr_to_csc)
     end
-    if !(backend isa KernelAbstractions.CPU) && Tv <: Number
+    if !(is_cpu_backend(backend)) && Tv <: Number
         if reuse isa SparseLU && sparse_lu_same_pattern(reuse, A)
             return resetup_sparse_lu!(reuse, A)
         end
         return setup_sparse_lu(A)
     end
-    if backend isa KernelAbstractions.CPU || native_dense_lu(A.nzval)
+    if is_cpu_backend(backend) || native_dense_lu(A.nzval)
         if reuse isa DenseLUState && size(reuse.factorization.factors) == size(A)
             return update_coarse_solver!(reuse, A)
         end
-        matrix = KernelAbstractions.zeros(backend, Tv, matrix_nrows(A), matrix_ncols(A))
+        matrix = backend_zeros(backend, Tv, matrix_nrows(A), matrix_ncols(A))
         copy_csr_to_dense!(matrix, A)
         return DenseLUState(lu!(matrix))
     end
@@ -1785,7 +1785,7 @@ function make_level(
         reuse_A_structure::Bool = false,
         reallocation_tracker = nothing
     ) where {Tv, Ti}
-    if isnothing(old_level) && backend isa KernelAbstractions.CPU
+    if isnothing(old_level) && is_cpu_backend(backend)
         # The symbolic setup has already created owned CPU arrays. Retain them
         # directly instead of duplicating the complete hierarchy.
         A, P, Pt, G = A_cpu, P_cpu, Pt_cpu, G_cpu
@@ -1842,7 +1842,7 @@ function make_level(
         old_bc, backend, Tv, ncoarse;
         reallocation_tracker = reallocation_tracker
     )
-    if isnothing(old_level) && backend isa KernelAbstractions.CPU
+    if isnothing(old_level) && is_cpu_backend(backend)
         cf_d, cm_d, st_d = cf, cmap, strong
     else
         old_cf = optional_property(old_level, :cf)
@@ -1944,7 +1944,7 @@ function initial_hierarchy_state(
         workspace, host_finest
     )
     backend = matrix_backend(Ain)
-    cpu_backend = backend isa KernelAbstractions.CPU
+    cpu_backend = is_cpu_backend(backend)
     if !isnothing(host_finest)
         current = host_finest
         stage_slot = cpu_backend ? 0 : 1

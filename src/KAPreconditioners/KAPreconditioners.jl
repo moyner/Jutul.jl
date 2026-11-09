@@ -2,7 +2,7 @@ module KAPreconditioners
 
 const JULIA_VER_CAN_SHRINK = VERSION >= v"1.11"
 
-using KernelAbstractions
+include("backends.jl")
 using LinearAlgebra
 using Polyester: @batch
 using SparseArrays

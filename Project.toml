@@ -13,7 +13,6 @@ ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 ILUZero = "88f59080-6952-5380-9ea5-54057fb9a43f"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
-KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LinearOperators = "5c8ed15e-5a4c-59e4-a42b-c7e8811fb125"
@@ -37,6 +36,7 @@ SymRCM = "286e6d88-80af-4590-acc9-0001b223b9bd"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 
 [weakdeps]
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
 AMGCLWrap = "4f76b812-4ba5-496d-b042-d70715554288"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
@@ -54,14 +54,15 @@ PartitionedArrays = "5a9dfac6-5c52-46f7-8278-5e2210713be9"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [extensions]
-JutulAMDGPUExt = "AMDGPU"
+JutulKernelAbstractionsExt = "KernelAbstractions"
+JutulAMDGPUExt = ["AMDGPU", "KernelAbstractions"]
 JutulAMGCLWrapExt = "AMGCLWrap"
-JutulCUDAExt = "CUDA"
-JutulCUDSSExt = ["CUDA", "CUDSS"]
+JutulCUDAExt = ["CUDA", "KernelAbstractions"]
+JutulCUDSSExt = ["CUDA", "CUDSS", "KernelAbstractions"]
 JutulGLMakieExt = "GLMakie"
 JutulGmshExt = "Gmsh"
 JutulHYPREExt = ["HYPRE", "MPI"]
-JutulKAPreconditionersMetalExt = "Metal"
+JutulKAPreconditionersMetalExt = ["Metal", "KernelAbstractions"]
 JutulKLUExt = "KLU"
 JutulKaHyParExt = "KaHyPar"
 JutulLBFGSBExt = "LBFGSB"
@@ -110,6 +111,7 @@ WriteVTK = "1"
 julia = "1.10"
 
 [extras]
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 Gmsh = "705231aa-382f-11e9-3f0c-b7cb4346fdeb"
 HYPRE = "b5ffcf37-a2bd-41ab-a3da-4bd9bc8ad771"
@@ -122,4 +124,4 @@ PartitionedArrays = "5a9dfac6-5c52-46f7-8278-5e2210713be9"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "KaHyPar", "HYPRE", "KLU", "LBFGSB", "CUDA"]
+test = ["KernelAbstractions", "Test", "KaHyPar", "HYPRE", "KLU", "LBFGSB", "CUDA"]

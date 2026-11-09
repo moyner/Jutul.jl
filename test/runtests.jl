@@ -1,4 +1,4 @@
-using Jutul
+using Jutul, KernelAbstractions
 include("krylov.jl")
 include("linalg/ilu.jl")
 include("linalg/lu_solver.jl")

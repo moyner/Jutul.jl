@@ -14,7 +14,7 @@ matrix_real_type(::Type{T}) where {T} = real(matrix_scalar_type(T))
 
 function matrix_backend(A::StaticSparsityMatrixCSR)
     if isnothing(A.backend)
-        return KernelAbstractions.get_backend(A.nzval)
+        return array_backend(A.nzval)
     else
         return A.backend
     end
@@ -24,11 +24,11 @@ end
 # options may still differ within the same backend type.
 # Compare backend types when checking storage compatibility instead of backend
 # object identity.
-@inline same_backend(first, second) = typeof(first) === typeof(second)
+@inline same_backend(first, second) = typeof(first) === typeof(second) || (is_cpu_backend(first) && is_cpu_backend(second))
 
 function matrix_batch_size(A::StaticSparsityMatrixCSR)
     minbatch = A.minbatch
-    if matrix_backend(A) isa KernelAbstractions.CPU
+    if is_cpu_backend(matrix_backend(A))
         return Int(minbatch)
     elseif minbatch > 1
         return Int(minbatch)
@@ -38,22 +38,16 @@ function matrix_batch_size(A::StaticSparsityMatrixCSR)
 end
 
 function matrix_kernel_block_size(A::StaticSparsityMatrixCSR)
-    if matrix_backend(A) isa KernelAbstractions.CPU
+    if is_cpu_backend(matrix_backend(A))
         return 128
     else
         return matrix_batch_size(A)
     end
 end
 
-function synchronize_backend(backend)
-    if hasmethod(KernelAbstractions.synchronize, Tuple{typeof(backend)})
-        KernelAbstractions.synchronize(backend)
-    end
-    return nothing
-end
 
 function backend_copy(backend, source::AbstractVector{T}) where {T}
-    destination = KernelAbstractions.allocate(backend, T, length(source))
+    destination = backend_allocate(backend, T, length(source))
     if source isa BitVector
         copyto!(destination, Vector{Bool}(source))
     else
@@ -62,8 +56,6 @@ function backend_copy(backend, source::AbstractVector{T}) where {T}
     return destination
 end
 
-backend_zeros(backend, ::Type{T}, n::Integer) where {T} =
-    KernelAbstractions.zeros(backend, T, Int(n))
 
 function csr_matrix(
         rowptr::AbstractVector{Ti}, colval::AbstractVector{Ti},
@@ -173,7 +165,7 @@ function csr_matrix(
         A, Ti; block_size = block_size, use_vendor_linalg = use_vendor_linalg
     )
     selected_backend = isnothing(backend) ? matrix_backend(host) : backend
-    if selected_backend isa KernelAbstractions.CPU
+    if is_cpu_backend(selected_backend)
         return host
     end
     return matrix_to_backend(host, selected_backend, Int(block_size))

@@ -142,7 +142,7 @@ function setup_smoother(
         reuse = nothing, partition = nothing, reallocation_tracker = nothing
     )
     require_square_matrix(A, "Hybrid Gauss-Seidel")
-    cpu_storage = matrix_backend(A) isa KernelAbstractions.CPU &&
+    cpu_storage = is_cpu_backend(matrix_backend(A)) &&
         A.rowptr isa Vector && A.colval isa Vector && A.nzval isa Vector
     if !cpu_storage
         throw(ArgumentError("Hybrid Gauss-Seidel requires CPU Vector CSR storage"))

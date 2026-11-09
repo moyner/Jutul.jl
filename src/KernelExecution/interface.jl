@@ -18,6 +18,13 @@ buffers. Unsupported metadata is deliberately left unchanged by default.
 """
 backend_copyto!(destination, source) = destination
 
+function backend_copyto!(destination::Array, source::Array)
+    length(destination) == length(source) || throw(DimensionMismatch(
+        "backend copy requires equal lengths, got $(length(destination)) and $(length(source))"))
+    copyto!(destination, source)
+    return destination
+end
+
 """
     prepare_backend_transfer!(storage, model)
 

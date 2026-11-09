@@ -11,8 +11,8 @@ end
 
 @inline spai0_inverse(diagonal, scale, damping) = damping * inv(diagonal)
 
-@kernel function spai0_setup_kernel!(d, @Const(rp), @Const(cv), @Const(av), damping, n)
-    i = @index(Global)
+@inline function spai0_setup_kernel_at_index!(kernel_index, d, rp, cv, av, damping, n)
+    i = kernel_index
     if i <= n
         diagonal = zero(eltype(d))
         scale = zero(damping)
@@ -25,11 +25,13 @@ end
     end
 end
 
-@kernel function spai0_step_kernel!(
-        dst, @Const(src), @Const(b), @Const(d),
-        @Const(rp), @Const(cv), @Const(av), n
+spai0_setup_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(spai0_setup_kernel_at_index!, workgroupsize)
+
+@inline function spai0_step_kernel_at_index!(kernel_index,
+        dst, src, b, d,
+        rp, cv, av, n
     )
-    i = @index(Global)
+    i = kernel_index
     if i <= n
         residual = b[i]
         @inbounds for k in rp[i]:(rp[i + 1] - 1)
@@ -39,39 +41,47 @@ end
     end
 end
 
-@kernel function spai0_apply_kernel!(x, @Const(b), @Const(d), n)
-    i = @index(Global)
+spai0_step_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(spai0_step_kernel_at_index!, workgroupsize)
+
+@inline function spai0_apply_kernel_at_index!(kernel_index, x, b, d, n)
+    i = kernel_index
     if i <= n
         @inbounds x[i] = d[i] * b[i]
     end
 end
 
-@kernel function spai0_residual_step_kernel!(
-        dst, @Const(src), @Const(residual),
-        @Const(d), n
+spai0_apply_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(spai0_apply_kernel_at_index!, workgroupsize)
+
+@inline function spai0_residual_step_kernel_at_index!(kernel_index,
+        dst, src, residual,
+        d, n
     )
-    i = @index(Global)
+    i = kernel_index
     if i <= n
         @inbounds dst[i] = src[i] + d[i] * residual[i]
     end
 end
 
-@kernel function spai0_zero_residual_step_kernel!(
-        dst, @Const(residual),
-        @Const(d), n
+spai0_residual_step_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(spai0_residual_step_kernel_at_index!, workgroupsize)
+
+@inline function spai0_zero_residual_step_kernel_at_index!(kernel_index,
+        dst, residual,
+        d, n
     )
-    i = @index(Global)
+    i = kernel_index
     if i <= n
         @inbounds dst[i] = d[i] * residual[i]
     end
 end
 
-@kernel function zero_spai0_residual_kernel!(
-        x, residual, @Const(b), @Const(d),
-        @Const(rp), @Const(cv),
-        @Const(av), n
+spai0_zero_residual_step_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(spai0_zero_residual_step_kernel_at_index!, workgroupsize)
+
+@inline function zero_spai0_residual_kernel_at_index!(kernel_index,
+        x, residual, b, d,
+        rp, cv,
+        av, n
     )
-    i = @index(Global)
+    i = kernel_index
     if i <= n
         ax = zero(eltype(residual))
         @inbounds for k in rp[i]:(rp[i + 1] - 1)
@@ -84,6 +94,8 @@ end
         end
     end
 end
+
+zero_spai0_residual_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(zero_spai0_residual_kernel_at_index!, workgroupsize)
 
 function setup_smoother(
         A::StaticSparsityMatrixCSR{Tv}, config::SPAI0 = SPAI0();
@@ -184,7 +196,7 @@ function apply!(x::AbstractVector, state::SPAI0State, b::AbstractVector)
     ensure_smoother_work!(state, b)
     backend = state.backend
     n = length(x)
-    same_backend(KernelAbstractions.get_backend(x), backend) ||
+    same_backend(array_backend(x), backend) ||
         throw(ArgumentError("output and smoother must use the same backend"))
     kernel! = spai0_apply_kernel!(backend, state.block_size)
     kernel!(x, b, state.diagonal, n; ndrange = n)

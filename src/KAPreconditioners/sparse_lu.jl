@@ -66,11 +66,11 @@ function sparse_lu_pattern(A::StaticSparsityMatrixCSR)
         Int.(host.rowptr), Int.(host.colval)
 end
 
-@kernel function sparse_lu_factor_kernel!(
+@inline function sparse_lu_factor_kernel_at_index!(kernel_index,
         factors, source, rowptr, colval, diagonal, source_to_factor,
         status, nnz_source, n
     )
-    index = @index(Global)
+    index = kernel_index
     if index == 1
         status[1] = zero(eltype(status))
         @inbounds for k in eachindex(factors)
@@ -111,10 +111,12 @@ end
     end
 end
 
-@kernel function pivoted_sparse_lu_factor_kernel!(
+sparse_lu_factor_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(sparse_lu_factor_kernel_at_index!, workgroupsize)
+
+@inline function pivoted_sparse_lu_factor_kernel_at_index!(kernel_index,
         factors, pivots, status, source, rowptr, colval, n
     )
-    index = @index(Global)
+    index = kernel_index
     if index == 1
         status[1] = zero(eltype(status))
         @inbounds for k in eachindex(factors)
@@ -164,10 +166,12 @@ end
     end
 end
 
-@kernel function sparse_lu_solve_kernel!(
+pivoted_sparse_lu_factor_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(pivoted_sparse_lu_factor_kernel_at_index!, workgroupsize)
+
+@inline function sparse_lu_solve_kernel_at_index!(kernel_index,
         output, rhs, factors, rowptr, colval, diagonal, n
     )
-    index = @index(Global)
+    index = kernel_index
     if index == 1
         @inbounds for i in 1:n
             value = rhs[i]
@@ -186,8 +190,10 @@ end
     end
 end
 
-@kernel function pivoted_sparse_lu_solve_kernel!(output, rhs, factors, pivots, n)
-    index = @index(Global)
+sparse_lu_solve_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(sparse_lu_solve_kernel_at_index!, workgroupsize)
+
+@inline function pivoted_sparse_lu_solve_kernel_at_index!(kernel_index, output, rhs, factors, pivots, n)
+    index = kernel_index
     if index == 1
         @inbounds for i in 1:n
             output[i] = rhs[i]
@@ -215,6 +221,8 @@ end
     end
 end
 
+pivoted_sparse_lu_solve_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(pivoted_sparse_lu_solve_kernel_at_index!, workgroupsize)
+
 function setup_sparse_lu(A::StaticSparsityMatrixCSR; pivoting::Bool = true)
     size(A, 1) == size(A, 2) ||
         throw(DimensionMismatch("sparse LU requires a square matrix"))
@@ -234,9 +242,9 @@ function setup_sparse_lu(A::StaticSparsityMatrixCSR; pivoting::Bool = true)
         nfactors = length(colval)
     end
     Ti = eltype(A.rowptr)
-    factors = KernelAbstractions.allocate(backend, eltype(A.nzval), nfactors)
-    pivots = KernelAbstractions.allocate(backend, Ti, size(A, 1))
-    status = KernelAbstractions.allocate(backend, Ti, 1)
+    factors = backend_allocate(backend, eltype(A.nzval), nfactors)
+    pivots = backend_allocate(backend, Ti, size(A, 1))
+    status = backend_allocate(backend, Ti, 1)
     state = KASparseLUFactor(
         backend_copy(backend, Ti.(rowptr)), backend_copy(backend, Ti.(colval)),
         backend_copy(backend, Ti.(diagonal)), backend_copy(backend, Ti.(map)),

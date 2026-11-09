@@ -4,7 +4,7 @@ function setup_smoother(
         reallocation_tracker = nothing
     ) where {Tv}
     require_square_matrix(A, "Gauss-Seidel")
-    matrix_backend(A) isa KernelAbstractions.CPU || throw(
+    is_cpu_backend(matrix_backend(A)) || throw(
         ArgumentError(
             "Gauss-Seidel is only available on the CPU backend"
         )

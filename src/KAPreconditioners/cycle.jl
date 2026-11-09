@@ -9,7 +9,7 @@ end
 
 function restrict!(
         bc::Vector, Pt::TransposeMap, P::Prolongation, r::Vector,
-        ::KernelAbstractions.CPU, block_size
+        ::CPUBackend, block_size
     )
     foreach_cpu_row(P.ncol, block_size) do I
         value = zero(eltype(bc))
@@ -37,7 +37,7 @@ end
 
 function prolong!(
         x::Vector, P::Prolongation, xc::Vector,
-        ::KernelAbstractions.CPU, block_size
+        ::CPUBackend, block_size
     )
     foreach_cpu_row(P.nrow, block_size) do i
         value = prolongation_row_value(P, xc, i, eltype(x))
@@ -54,7 +54,7 @@ end
 
 function prolong_to!(
         dst::Vector, src::Vector, P::Prolongation, xc::Vector,
-        ::KernelAbstractions.CPU, block_size
+        ::CPUBackend, block_size
     )
     foreach_cpu_row(P.nrow, block_size) do i
         value = prolongation_row_value(P, xc, i, eltype(dst))

@@ -105,7 +105,7 @@ function update_prolongation!(
         update_aggressive_prolongation!(level, interpolation)
         return level
     end
-    if matrix_backend(A) isa KernelAbstractions.CPU &&
+    if is_cpu_backend(matrix_backend(A)) &&
             A.nzval isa Vector && A.rowptr isa Vector && A.colval isa Vector
         update_cpu_prolongation!(
             P, A, level.cf, level.coarse_map, level.strength, interpolation, workspace
@@ -249,7 +249,7 @@ function partial_reset!(
     end
     old_levels = H.levels
     cutoff_matrix = old_levels[cutoff].A
-    host_cutoff = H.backend isa KernelAbstractions.CPU ? cutoff_matrix : host_csr(cutoff_matrix)
+    host_cutoff = is_cpu_backend(H.backend) ? cutoff_matrix : host_csr(cutoff_matrix)
     replaced_bytes = Ref(0)
     H.levels = build_hierarchy(
         cutoff_matrix, H.options; reuse_levels = old_levels,
@@ -297,7 +297,7 @@ function validate_memory_reuse(H::AMGHierarchy, dimensions, nonzero_count)
 end
 
 function host_value_buffer(H::AMGHierarchy{Tv, Ti}, n::Integer) where {Tv, Ti}
-    if H.backend isa KernelAbstractions.CPU
+    if is_cpu_backend(H.backend)
         return H.levels[1].A.nzval
     end
     stage = H.workspace.stage_matrix1
@@ -318,7 +318,7 @@ function memory_reset!(H::AMGHierarchy{Tv, Ti}, A::StaticSparsityMatrixCSR) wher
     validate_memory_reuse(H, size(A), matrix_nonzeros(A))
     finest = H.levels[1].A
     finest.nzval === A.nzval || copy_matrix_values!(finest, A)
-    if H.backend isa KernelAbstractions.CPU
+    if is_cpu_backend(H.backend)
         host_finest = finest
     else
         host_values = host_value_buffer(H, matrix_nonzeros(A))
@@ -394,7 +394,7 @@ function resetup_amg!(
             host_values, A, H.pattern_rowptr,
             H.workspace.ti1
         )
-        H.backend isa KernelAbstractions.CPU ||
+        is_cpu_backend(H.backend) ||
             copyto!(finest.nzval, 1, host_values, 1, nnz(A))
         host_finest = csr_matrix(
             H.pattern_rowptr, H.pattern_colval, host_values,

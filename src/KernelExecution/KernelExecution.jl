@@ -1,7 +1,6 @@
 module KernelExecution
 using LinearAlgebra
 using SparseArrays
-using KernelAbstractions
 import Adapt
 import ForwardDiff
 import StaticArrays

@@ -90,7 +90,7 @@ function apply!(
         x::AbstractVector, state::VendorILUState, b::AbstractVector
     )
     require_apply_dimensions(x, state, b)
-    same_backend(KernelAbstractions.get_backend(x), state.backend) ||
+    same_backend(array_backend(x), state.backend) ||
         throw(ArgumentError("output and smoother must use the same backend"))
     return vendor_ilu_solve!(x, state, b)
 end

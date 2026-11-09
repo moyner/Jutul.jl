@@ -1,3 +1,5 @@
+is_kernel_backend(backend) = false
+
 """
     KernelAbstractionsContext(backend; float_type=Float64, index_type=Int,
                               linear_float_type=float_type,
@@ -70,7 +72,7 @@ function KernelAbstractionsContext(
         reduce_memory = true,
         use_vendor_linalg::Bool = false
     ) where {F, I, LF, LI}
-    if !(backend isa KernelAbstractions.Backend)
+    if !(is_kernel_backend(backend))
         throw(ArgumentError("backend must be a KernelAbstractions.Backend"))
     end
     if !(F <: AbstractFloat)
@@ -92,10 +94,10 @@ function KernelAbstractionsContext(
         throw(ArgumentError("minbatch must be positive"))
     end
     if ismissing(use_kernels_for_secondary)
-        use_kernels_for_secondary = !(backend isa KernelAbstractions.CPU)
+        use_kernels_for_secondary = !(KAPreconditioners.is_cpu_backend(backend))
     end
     if !use_kernels_for_secondary &&
-            !(backend isa KernelAbstractions.CPU)
+            !(KAPreconditioners.is_cpu_backend(backend))
         throw(
             ArgumentError(
                 "use_kernels_for_secondary=false requires a CPU backend"
@@ -123,14 +125,11 @@ minbatch(ctx::KernelAbstractionsContext) = ctx.minbatch
 context_secondary_scheme(::KernelAbstractionsContext{B, F, I, L, LF, LI, S}) where {B, F, I, L, LF, LI, S} = S
 
 function synchronize(ctx::KernelAbstractionsContext)
-    if applicable(KernelAbstractions.synchronize, ctx.backend)
-        KernelAbstractions.synchronize(ctx.backend)
-    end
+    KAPreconditioners.synchronize_backend(ctx.backend)
     return ctx
 end
 
-KernelAbstractions.get_backend(ctx::KernelAbstractionsContext) = ctx.backend
-is_cpu_backend(ctx::KernelAbstractionsContext) = ctx.backend isa KernelAbstractions.CPU
+is_cpu_backend(ctx::KernelAbstractionsContext) = KAPreconditioners.is_cpu_backend(ctx.backend)
 
 function Base.adjoint(ctx::KernelAbstractionsContext)
     return KernelAbstractionsContext(
@@ -171,10 +170,7 @@ function linear_solver_context(ctx::KernelAbstractionsContext)
 end
 
 
-@kernel function threaded_loop_kernel(f)
-    index = @index(Global)
-    f(index)
-end
+function threaded_loop_kernel end
 
 function launch_threaded_loop(
         f, n, ctx::KernelAbstractionsContext;
@@ -226,13 +222,7 @@ function threaded_loop_minbatch(
     return nothing
 end
 
-@kernel function secondary_variable_update_kernel!(
-        dest, var, model,
-        @Const(dependencies)
-    )
-    i = @index(Global)
-    Jutul.update_secondary_variable!(dest, var, model, dependencies, i:i)
-end
+function secondary_variable_update_kernel! end
 
 function secondary_variable_loop!(state, model, k::Symbol, ctx::KernelAbstractionsContext; do_wait = true)
     dest = state[k]

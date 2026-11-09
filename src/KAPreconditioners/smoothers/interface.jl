@@ -133,12 +133,14 @@ function smoother_residual!(state, A::StaticSparsityMatrixCSR, x, b)
     return residual!(state.residual, A, x, b)
 end
 
-@kernel function axpy_kernel!(x, @Const(y), alpha, n)
-    i = @index(Global)
+@inline function axpy_kernel_at_index!(kernel_index, x, y, alpha, n)
+    i = kernel_index
     if i <= n
         @inbounds x[i] += alpha * y[i]
     end
 end
+
+axpy_kernel!(::CPUBackend, workgroupsize = 128) = CPUKernel(axpy_kernel_at_index!, workgroupsize)
 
 function axpy!(x, y, alpha, backend, block_size)
     kernel! = axpy_kernel!(backend, block_size)
@@ -148,7 +150,7 @@ end
 
 function axpy!(
         x::Vector, y::Vector, alpha,
-        ::KernelAbstractions.CPU, min_batch
+        ::CPUBackend, min_batch
     )
     foreach_cpu_row(length(x), min_batch) do i
         @inbounds x[i] += alpha * y[i]
